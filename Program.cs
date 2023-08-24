@@ -1,13 +1,11 @@
-﻿using System.Data;
-using System.Diagnostics;
-using Npgsql;
+﻿using Npgsql;
 using Npgsql.Replication;
 using Npgsql.Replication.PgOutput;
 
 const string connectionString =
-    "Server=127.0.0.1;Port=5445;Database=npgsql_test;UserId=npgsql_test;Password=npgsql_test;IncludeErrorDetail=true;";
+    "Server=127.0.0.1;Port=5445;Database=npgsql_test;UserId=npgsql_test;Password=npgsql_test;IncludeErrorDetail=true;Pooling=false;";
 
-var logicalReplicationConnection = new LogicalReplicationConnection(connectionString);
+var logicalReplicationConnection = new LogicalReplicationConnection(connectionString + "Application Name=replicator;");
 await logicalReplicationConnection.Open();
 var slot = await logicalReplicationConnection.CreatePgOutputReplicationSlot(
     "test_slot",
@@ -16,21 +14,6 @@ var slot = await logicalReplicationConnection.CreatePgOutputReplicationSlot(
     twoPhase: false
 );
 
-var snapshotName = slot.SnapshotName ?? throw new UnreachableException("Expected snapshot name");
-
-var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString);
-List<int> ids = new();
-await using (var dataSource = dataSourceBuilder.Build()) {
-    await using var connection = await dataSource.OpenConnectionAsync();
-    await using var txn = await connection.BeginTransactionAsync(IsolationLevel.RepeatableRead);
-    await using var setTransactionCommand = new NpgsqlCommand($"SET TRANSACTION SNAPSHOT '{snapshotName}'", connection);
-    await setTransactionCommand.ExecuteNonQueryAsync();
-    await using var idsQueryCommand = new NpgsqlCommand("SELECT id FROM test_table", connection);
-    await using var reader = await idsQueryCommand.ExecuteReaderAsync();
-    while (await reader.ReadAsync()) {
-        ids.Add(reader.GetInt32(0));
-    }
-}
 
 var pgOutputOptions = new PgOutputReplicationOptions(
     publicationName: "test_publication",
@@ -46,6 +29,7 @@ await EmitMessage(false, "test_prefix", "ping");
 await consumptionTask;
 
 async Task EmitMessage(bool transactional, string prefix, string message) {
+    var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString + "Application Name=emitter;");
     await using var dataSource = dataSourceBuilder.Build();
     await using var conn = await dataSource.OpenConnectionAsync();
     await using var emitCommand =
