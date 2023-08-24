@@ -1,0 +1,12 @@
+services:
+  postgres:
+    image: postgres:15.3-bullseye
+    environment:
+      - POSTGRES_USER=npgsql_test
+      - POSTGRES_PASSWORD=npgsql_test
+      - POSTGRES_DB=npgsql_test
+    command: [ "postgres", "-c", "wal_level=logical", "-c", "log_statement=all", "-c", "log_replication_commands=on" ]
+    ports: 
+      - '5445:5432'
+    volumes:
+      - ./pg-init.sh:/docker-entrypoint-initdb.d/pg-init.sh
